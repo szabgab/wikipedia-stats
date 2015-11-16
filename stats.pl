@@ -10,9 +10,6 @@ binmode(STDERR, ":utf8");
 # URL of the page:   https://en.wikipedia.org/wiki/Perl
 # Title of the page: Perl
 # Language: en
-# https://www.mediawiki.org/wiki/Wikibase/API
-# https://www.mediawiki.org/wiki/API:Properties
-
 my $ua = LWP::UserAgent->new(
 	agent => 'wikipedia-stats/perl (https://github.com/szabgab/wikipedia-stats)'
 );
@@ -36,15 +33,24 @@ sub main {
 
 	my $q_number = get_q_number($title);
 	#say $q_number;
+	my %results;
 	my $languages = translations($q_number);
 	foreach my $lang (sort keys %$languages) {
 		say "$lang  $languages->{$lang}";
-		my $content = get_page($lang, $languages->{$lang});
-		open my $fh, '>>', $file or die "Could not open '$file' for writing\n";
-		print $fh "$time;$lang;" . length($content) . "\n";
-		close $fh;
-		return;
+		if ($lang !~ /^.+wiki$/) {
+			say "Skipping $lang";
+			next;
+		}
+        my $code = substr($lang, 0, -4);
+        $code =~ s/_/-/g;
+		my $content = get_page($code, $languages->{$lang});
+		$results{$lang}{chars} = length $content;
 	}
+	open my $fh, '>>', $file or die "Could not open '$file' for writing\n";
+	foreach my $lang (sort keys %results) {
+		print $fh "$time;$lang;wiki;$results{$lang}{chars}\n";
+	}
+	close $fh;
 }
 
 sub get_q_number {
@@ -74,13 +80,11 @@ sub translations {
 	if ($response->is_success) {
 	    #say $response->decoded_content;
 	    my $data = decode_json $response->decoded_content;
-	#die Dumper $data;
+		#die Dumper $data->{entities}{$q_number}{sitelinks};
+		
 		my %languages;
 		foreach my $lang (sort keys %{ $data->{entities}{$q_number}{sitelinks} } ) {
 			#say "$lang  $data->{entities}{$q_number}{sitelinks}{$lang}{title}";
-			#if ($lang !~ /^.+wiki$/) {
-			#}
-			my $code = $lang;
 			$languages{$lang} = $data->{entities}{$q_number}{sitelinks}{$lang}{title};
 		}
 		return \%languages;
